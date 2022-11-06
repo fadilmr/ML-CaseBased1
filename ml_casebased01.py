@@ -28,14 +28,14 @@ df.describe()
 
 df.info()
 
-"""## Preprocessing"""
+"""## Preprocessing
+
+drop total karena total merupakan jumlah dari para_A dan para_B sehingga tidak terlalu relevan
+"""
 
 df = df.drop(['TOTAL'], axis = 1)
 
-"""drop total karena total merupakan jumlah dari para_A dan para_B sehingga tidak terlalu relevan
-
-mencari value kosong dari tiap attribute
-"""
+"""mencari value kosong dari tiap attribute"""
 
 df.isnull().sum()
 
@@ -72,6 +72,8 @@ df.info()
 
 """## Train"""
 
+sns.countplot(df['Risk'], label = "Count")
+
 data_df = df.drop(['Audit_Risk'], axis=1)
 x = data_df.drop(['Risk'], axis = 1)
 y = data_df['Risk']
@@ -79,37 +81,41 @@ y = data_df['Risk']
 """Split data menjadi test dan train lalu di normalisasi menggunakan MinMaxScaler"""
 
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 
-x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=0.25, random_state=0)
-scaler = MinMaxScaler()
-x_train = scaler.fit_transform(x_train)
-x_test = scaler.fit_transform(x_test)
+scaler = StandardScaler()
 
-"""Implementasi PCA untuk mereduksi dimensi"""
+x_train, x_test, y_train, y_test = train_test_split(x,y, test_size = 0.2)
+x_train_scaled = scaler.fit_transform(x_train)
+x_test_scaled = scaler.transform(x_test)
+
+"""Implementasi PCA (Principal Component Analysis) untuk mereduksi dimensi"""
 
 from sklearn.decomposition import PCA
 
 pca = PCA(n_components=0.95)
 
-x_train_reduced = pca.fit_transform(x_train)
-x_test_reduced = pca.fit_transform(x_test)
+x_train_reduced = pca.fit_transform(x_train_scaled)
+x_test_reduced = pca.transform(x_test_scaled)
 
-"""Membuat Model menggunakan tensorflow dengan 3 Hidden Layer, 1 input Layer dan 1 Output Layer. menggunakan optimizer adam dengan learning rate 0.00005"""
+"""Membuat Model menggunakan tensorflow dengan 6 Hidden Layer, 1 input Layer dan 1 Output Layer. menggunakan optimizer adam dengan learning rate 0.00005"""
 
 import tensorflow as tf
 
 model = tf.keras.Sequential (
     [
-        tf.keras.layers.Dense(128, input_shape = (9, ), activation = 'relu'),
+        tf.keras.layers.Dense(128, activation = 'relu'),
         tf.keras.layers.Dense(64),
         tf.keras.layers.Dense(32),
         tf.keras.layers.Dense(16),
-        tf.keras.layers.Dense(1),
+        tf.keras.layers.Dense(8),    
+        tf.keras.layers.Dense(4),        
+        tf.keras.layers.Dense(2),        
+        tf.keras.layers.Dense(1, activation = 'sigmoid'),
     ]
 )
 
-model.compile(loss = 'binary_crossentropy', optimizer = tf.optimizers.Adam(learning_rate=0.00005), metrics = ['accuracy'])
+model.compile(loss = 'binary_crossentropy', optimizer = tf.optimizers.Adam(learning_rate=0.0000005), metrics = ['accuracy', 'Precision', 'Recall'])
 
 """Penggunaan Callback agar jika target terpenuhi proses training dapat berhenti"""
 
@@ -121,19 +127,38 @@ class callbacks(tf.keras.callbacks.Callback):
             self.model.stop_training = True
 callback = callbacks()
 
-model.summary()
-
 """Proses Training"""
 
-history = model.fit(x_train_reduced, y_train, epochs = 1000, batch_size = 100, callbacks=[callback])
+history = model.fit(x_train_reduced, y_train, epochs = 1000, callbacks=[callback])
 
 import matplotlib.pyplot as plt
 
 plt.plot(history.history['accuracy'])
+plt.plot(history.history['precision'])
+plt.plot(history.history['recall'])
+plt.plot(history.history['loss'])
 
-plt.title('Model Accuracy')
-plt.ylabel('Accuracy')
+plt.title('Evaluation')
+plt.ylabel('Value')
 plt.xlabel('Epoch')
 
-plt.legend(['Train', 'Test'], loc='lower right')
+plt.legend(['accuracy', 'precision', 'recall', 'loss'], loc='lower right')
 plt.show()
+
+y_train_pred = model.predict(x_train_reduced)
+y_test_pred = model.predict(x_test_reduced)
+
+y_train_pred_class = [1 if prob > 0.5 else 0 for prob in np.ravel(y_train_pred)]
+y_test_pred_class = [1 if prob > 0.5 else 0 for prob in np.ravel(y_test_pred)]
+
+y_train_pred_class[:10], y_test_pred_class[:10]
+
+from sklearn.metrics import confusion_matrix
+
+print(confusion_matrix(y_train,y_train_pred_class))
+print(confusion_matrix(y_test,y_test_pred_class))
+
+from sklearn.metrics import accuracy_score, precision_score, recall_score
+print(f'Accuracy : {accuracy_score(y_test, y_test_pred_class)*100:.2f}%')
+print(f'Precision : {precision_score(y_test, y_test_pred_class)*100:.2f}%')
+print(f'Recall : {recall_score(y_test, y_test_pred_class)*100:.2f}%')
